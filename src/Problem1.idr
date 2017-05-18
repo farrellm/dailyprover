@@ -1,8 +1,9 @@
 module Problem1
 
+%default total
+
 record DecFun (f : Nat -> Nat) where
   constructor MkDecreasingFunction
-    -- decreasing : ((LTE a b) -> (LTE (f b) (f a)))
     decreasing : (a : Nat) -> (b : Nat) -> LTE (f a) b -> LTE (f (S a)) b
 
 eqSucc' : (a = b) -> (S a = S b)
