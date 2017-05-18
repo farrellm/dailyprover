@@ -1,0 +1,8 @@
+package dailyprover
+
+-- dailyprover
+-- by Matthew Farrell
+
+opts = ""
+sourcedir = src
+modules = Dailyprover
