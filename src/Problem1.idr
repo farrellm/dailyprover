@@ -2,63 +2,95 @@ module Problem1
 
 %default total
 
-record DecFun (f : Nat -> Nat) where
-  constructor MkDecreasingFunction
-    decreasing : (a : Nat) -> (b : Nat) -> LTE (f a) b -> LTE (f (S a)) b
+Decr : (Nat -> Nat) -> Type
+Decr f = (x : Nat) -> LTE (f (S x)) (f x)
 
-eqSucc' : (a = b) -> (S a = S b)
-eqSucc' {a} {b} prf = eqSucc a b prf
+Valley : (Nat -> Nat) -> Nat -> Nat -> Type
+Valley f n x = (y : Nat) -> LTE x y -> LTE y (n+x) -> f y = f x
 
-splitLte : LTE a b -> Either (a = b) (LT a b)
-splitLte {b = Z} LTEZero = Left Refl
-splitLte {b = (S k)} LTEZero = Right (LTESucc LTEZero)
-splitLte (LTESucc x) =
-  case splitLte x of
-    Left eq => Left (eqSucc' eq)
-    Right lte' => Right (LTESucc lte')
+decrN : (n : Nat) -> (f : Nat -> Nat) -> Decr f -> (x : Nat) ->
+        LTE (f (n + x)) (f x)
+decrN Z f decr x = lteRefl
+decrN (S n') f decr x =
+  let ind = decrN n' f decr x
+      decrLte = decr (n' + x)
+  in lteTransitive decrLte ind
 
-tightenLt : LT a b -> (c ** LTE a c)
-tightenLt {a = a} {b = Z} lt = void (succNotLTEzero lt)
-tightenLt {a = a} {b = (S c)} lt =
-  let lte = fromLteSucc lt
-  in (c ** lte)
+lteZeqZ : (a : Nat) -> LTE a Z -> a = Z
+lteZeqZ Z LTEZero = Refl
 
-lteZeqZ : LTE a Z -> a = Z
-lteZeqZ LTEZero = Refl
+tightBound : (a : Nat) -> (b : Nat) -> LTE a b -> LTE b a -> a = b
+tightBound Z Z LTEZero LTEZero = Refl
+tightBound (S a') (S b') (LTESucc x) (LTESucc y) =
+  let ind = tightBound a' b' x y
+  in eqSucc a' b' ind
 
-argAddNBound : DecFun f -> LTE (f a) b -> LTE (f (a+n)) b
-argAddNBound {n = Z} {a} dec lte =
-  rewrite plusZeroRightNeutral a in
-  lte
-argAddNBound {n = (S k)} {a} {b} dec lte =
-  let ind = argAddNBound dec lte {n=k} {a=a}
-      lte' = (decreasing dec) (a+k) b ind
-  in rewrite sym (plusSuccRightSucc a k) in
-     lte'
+splitLte : (a : Nat) -> (b : Nat) -> LTE a b -> Either (a = b) (LT a b)
+splitLte Z Z LTEZero = Left Refl
+splitLte Z (S k) LTEZero = Right (LTESucc LTEZero)
+splitLte (S a') (S b') (LTESucc lte') =
+  case splitLte a' b' lte' of
+    (Left eq) => Left (eqSucc a' b' eq)
+    (Right lt) => Right (LTESucc lt)
 
-nValleyRec : (a : Nat) -> (bound : Nat) ->
-             (lteBound : LTE (f a) bound) ->
-             (dec : DecFun f) ->
-             (b : Nat ** (f b) = (f (plus b n)))
-nValleyRec {n} a Z lteBound dec =
-  let aEqZ = lteZeqZ lteBound
-      lteN = argAddNBound dec lteBound {a=a} {n=n}
-      nEqZ = lteZeqZ lteN
-  in (a ** trans aEqZ (sym nEqZ))
-nValleyRec {n} a bound@(S bound') lteBound dec =
-  case splitLte lteBound of
+boundedAbove : (n : Nat) -> (f : Nat -> Nat) -> (decr : Decr f) ->
+               (a : Nat) -> (x : Nat) -> LTE a x ->
+               LTE (f x) (f a)
+boundedAbove n f decr a x lte =
+  case splitLte a x lte of
+    (Left eq) => rewrite eq in lteRefl
     (Right lt) =>
-      let (LTESucc lteBound') = lt
-      in nValleyRec a bound' lteBound' dec
-    (Left eq) =>
-      let lteN = argAddNBound dec lteBound {a=a} {n=n}
-      in case splitLte lteN of
-              (Left eqN) => (a ** trans eq (sym eqN))
-              (Right ltN) =>
-                let (LTESucc lteBound') = ltN
-                in nValleyRec (a + n) bound' lteBound' dec
+      let S x' = x
+          LTESucc lte' = lt
+          ind = boundedAbove n f decr a x' lte'
+      in decr x' `lteTransitive` ind
 
-NValley : (dec : DecFun f) ->
-          (a : Nat ** (f a) = (f (a+n)))
-NValley {f} dec =
-  nValleyRec Z (f Z) lteRefl dec
+boundedBelow : (n : Nat) -> (f : Nat -> Nat) -> (decr : Decr f) ->
+               (a : Nat) -> (x : Nat) -> LTE x (n + a) ->
+               LTE (f (n + a)) (f x)
+boundedBelow Z f decr a x lte = boundedAbove Z f decr x a lte
+boundedBelow n@(S n') f decr a x lte =
+  let lte' = the (LTE x (S (n' + a)))
+                 (rewrite plusCommutative n' a in
+                  rewrite plusSuccRightSucc a n' in
+                  rewrite plusCommutative a (S n') in
+                  lte)
+  in case splitLte x (S (n' + a)) lte' of
+    (Left eq) => boundedAbove Z f decr x (S (n' + a)) lte'
+    (Right lt) =>
+      let LTESucc lte'' = lt
+          ind = boundedBelow n' f decr a x lte''
+      in decr (n' + a) `lteTransitive` ind
+
+mkValley : (n : Nat) -> (f : Nat -> Nat) -> (decr : Decr f) ->
+           (x : Nat) -> f x = f (n + x) ->
+           (y : Nat) -> LTE x y -> LTE y (n + x) -> f y = f x
+mkValley n f decr x prf y lteL lteU =
+  let u = boundedAbove n f decr x y lteL
+      l = boundedBelow n f decr x y lteU
+  in tightBound (f y) (f x) u (rewrite prf in l)
+
+decrValley_rec : (n : Nat) -> (f : Nat -> Nat) -> (decr : Decr f) ->
+                 (x : Nat) -> (bound : Nat) -> (boundLte : LTE (f x) bound) ->
+                 (a : Nat ** Valley f n a)
+decrValley_rec n f decr x Z boundLte =
+  let boundLteN = decrN n f decr x
+      boundLteN' = lteTransitive boundLteN boundLte
+      xEqZ = lteZeqZ (f x) boundLte
+      xNEqZ = lteZeqZ (f (n + x)) boundLteN'
+      xEqNx = xEqZ `trans` sym xNEqZ
+  in (x ** mkValley n f decr x xEqNx)
+
+decrValley_rec n f decr x bound@(S bound') boundLte =
+  case splitLte (f x) (S bound') boundLte of
+    (Right (LTESucc boundLte')) => decrValley_rec n f decr x bound' boundLte'
+    (Left boundEq) =>
+      let boundLteN = decrN n f decr x
+      in case splitLte (f (n + x)) (f x) boundLteN of
+              (Right boundLtN) =>
+                let boundLteN' = fromLteSucc (boundLtN `lteTransitive` boundLte)
+                in decrValley_rec n f decr (n + x) bound' boundLteN'
+              (Left boundEqN) => (x ** mkValley n f decr x (sym boundEqN))
+
+decrValley : (n : Nat) -> (f : Nat -> Nat) -> Decr f -> (x : Nat ** Valley f n x)
+decrValley n f decr = decrValley_rec n f decr Z (f Z) lteRefl
