@@ -6,3 +6,4 @@ package dailyprover
 opts = ""
 sourcedir = src
 modules = Dailyprover
+        , Common.Lte
